@@ -1,0 +1,33 @@
+Package: RegenerAR
+Type: Package
+Title: Herramientas Unificadas para el Análisis y Modelado de Germinación
+Version: 0.2.0
+Authors@R: 
+    person("Sebastian", "Zeballos",
+           email = "seba.zeba.30@gmail.com",
+           role = c("aut", "cre"))
+Description: Un paquete robusto para la preparación de matrices maestras de
+    germinación, modelado estadístico automatizado mediante GLM binomial, Gamma
+    y lineal clásico, y generación de reportes científicos unificados.
+License: GPL-3
+Encoding: UTF-8
+Imports: 
+    cli,
+    detectseparation,
+    dplyr,
+    emmeans,
+    multcomp,
+    stats,
+    tidyr,
+    utils
+Suggests: 
+    broom,
+    knitr,
+    logistf,
+    performance,
+    rmarkdown,
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0
+RoxygenNote: 7.3.3

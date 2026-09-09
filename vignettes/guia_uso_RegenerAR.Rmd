@@ -1,0 +1,102 @@
+---
+title: "Guía de Uso de RegenerAR"
+author: "Sebastian R. Zeballos"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Guía de Uso de RegenerAR}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# Bienvenido a RegenerAR
+
+**RegenerAR** es un paquete de R diseñado para automatizar el análisis estadístico de ensayos de germinación, desde el cálculo de índices cinéticos hasta la generación de tablas listas para publicación.
+
+## Instalación
+
+```{r eval=FALSE}
+# Requiere el paquete 'devtools'
+# install.packages("devtools")
+devtools::install_github("sebaszebas/RegenerAR")
+
+library(RegenerAR)
+```
+
+# Flujo de Trabajo Típico
+
+El análisis con RegenerAR sigue 4 pasos principales:
+
+## 1. Preparar la Matriz Maestra
+
+Tus datos deben estar en formato ancho, con columnas de factores, semillas sembradas y conteos diarios nombrados como `D0`, `D1`, `D2`, etc.
+
+```{r eval=FALSE}
+# Leer tus datos
+datos <- read.table("mis_datos.txt", header = TRUE, sep = "\t", dec = ".")
+
+# Generar la matriz con todos los índices
+matriz_maestra <- preparar_datos_germinacion(
+  data = datos,
+  factores = c("Luz", "Temperatura"),
+  solo_luz_cinetica = TRUE
+)
+```
+*Nota: Si tus datos están en formato acumulado, RegenerAR los detectará y te pedirá corregirlos para mantener el rigor científico.*
+
+## 2. Ajustar Modelos Estadísticos
+
+El paquete selecciona automáticamente la familia (Binomial, Gamma, Arcoseno) y la estructura (interacción o aditivo).
+
+```{r eval=FALSE}
+# Germinación Final (GLM Binomial / Quasibinomial)
+modelo_pg <- ajustar_modelo(matriz_maestra, c("Luz", "Temperatura"), "germinacion")
+
+# Tiempo Medio de Germinación (GLM Gamma)
+modelo_tmg <- ajustar_modelo(matriz_maestra, c("Luz", "Temperatura"), "TMG")
+```
+
+## 3. Post-hoc y Comparaciones Múltiples
+
+Genera letras de agrupamiento (Tukey) con back-transformation automática a la escala original.
+
+```{r eval=FALSE}
+# Obtener tabla con letras
+posthoc_pg <- post_hoc_germinacion(modelo_pg, alpha = 0.05)
+print(posthoc_pg)
+```
+*Nota:* Para variables de tiempo (TMG, t50), la letra "a" se asigna al **menor** tiempo. Para PG o IVG, la "a" es el **mayor** valor.
+
+## 4. Reportes Finales
+
+```{r eval=FALSE}
+# Tabla Maestra de Óptimos (Combina PG, TMG e IVG)
+tabla_optimos <- reportar_resultados(matriz_maestra, tipo = "optimo", verbose = FALSE)
+print(tabla_optimos)
+
+# Tabla de Percentiles
+tabla_perc <- reportar_resultados(matriz_maestra, tipo = "percentiles")
+
+# Índice de Fotoblastismo (RLG)
+tabla_rlg <- reportar_resultados(matriz_maestra, tipo = "fotoblastismo")
+```
+
+# Solución de Problemas Comunes
+
+- **"Firth no convergió"**: El paquete conmuta automáticamente a GLM Binomial clásico. Considera colapsar niveles de factores si la separación es extrema.
+- **"Pérdida crítica de datos"**: Verifica que todas las combinaciones de factores tengan al menos 2 réplicas válidas.
+- **Warning de sobredispersión**: El paquete corrige esto automáticamente cambiando a familia *Quasibinomial*.
+
+# Soporte
+
+Para reportar errores o sugerencias, visita:  
+[https://github.com/sebaszebas/RegenerAR/issues](https://github.com/TU_USUARIO_GITHUB/RegenerAR/issues)
