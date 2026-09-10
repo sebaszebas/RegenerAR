@@ -39,18 +39,17 @@
 #' @param data Data frame en formato ancho con columnas de conteos diarios
 #'   nombradas como D1, D2, D3... (ej: D0, D1, D2, D3, D4, D5).
 #' @param factores Vector de caracteres con los nombres de los factores
-#'   explicativos del diseño experimental (reservado para uso futuro).
+#'   explicativos del diseño experimental (ej: \code{c("Temperatura", "Luz")}).
 #' @param col_semillas Carácter. Nombre de la columna con el número de
 #'   semillas sembradas por réplica. Por defecto \code{"Semillas"}.
-#' @param col_temperatura Carácter. Nombre de la columna de temperatura.
-#'   Por defecto \code{"Temperatura"}.
-#' @param col_luz Carácter. Nombre de la columna de condición de luz.
-#'   Por defecto \code{"Luz"}.
+#' @param factor_luz Carácter o \code{NULL}. Nombre de la columna que representa
+#'   el factor de luz (si existe en el diseño experimental). Si es \code{NULL},
+#'   no se calculará el RLG. Por defecto es \code{NULL}.
 #' @param umbral_min_rlg Numérico. Porcentaje mínimo de germinación
 #'   requerido en al menos una condición (luz u oscuridad) para calcular
 #'   el RLG. Por defecto \code{50}.
 #' @param etiq_luz Carácter. Etiqueta que identifica la condición de luz
-#'   en la columna \code{col_luz}. Por defecto \code{"Luz"}.
+#'   en la columna \code{factor_luz}. Por defecto \code{"Luz"}.
 #' @param etiq_osc Carácter. Etiqueta que identifica la condición de
 #'   oscuridad. Por defecto \code{"Oscuridad"}.
 #' @param solo_luz_cinetica Lógico. Si es \code{TRUE}, restringe el cálculo
@@ -80,25 +79,29 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Supongamos un data frame 'datos' con columnas:
-#' # Semillas, Temperatura, Luz, D1, D2, D3, D4, D5
-#'
+#' # Ejemplo 1: Experimento con Luz y Temperatura
 #' matriz_maestra <- preparar_datos_germinacion(
 #'   data = datos,
 #'   factores = c("Temperatura", "Luz"),
 #'   col_semillas = "Semillas",
-#'   col_temperatura = "Temperatura",
-#'   col_luz = "Luz",
+#'   factor_luz = "Luz",
 #'   umbral_min_rlg = 50,
 #'   solo_luz_cinetica = TRUE
+#' )
+#'
+#' # Ejemplo 2: Experimento sin luz (solo Humedad y Sustrato)
+#' matriz_maestra <- preparar_datos_germinacion(
+#'   data = datos,
+#'   factores = c("Humedad", "Sustrato"),
+#'   col_semillas = "Semillas",
+#'   factor_luz = NULL  # No se calculará RLG
 #' )
 #' }
 preparar_datos_germinacion <- function(
     data,
     factores,
     col_semillas = "Semillas",
-    col_temperatura = "Temperatura",
-    col_luz = "Luz",
+    factor_luz = NULL,
     umbral_min_rlg = 50,
     etiq_luz = "Luz",
     etiq_osc = "Oscuridad",
@@ -172,13 +175,32 @@ preparar_datos_germinacion <- function(
                     NA_real_)
 
   # ----------------------------------------------------------
-  # 5. VALIDACIÓN DE COLUMNAS ADICIONALES
+  # 5. VALIDACIÓN Y CONFIGURACIÓN DE FACTOR_LUZ
   # ----------------------------------------------------------
-  if (!col_temperatura %in% names(data)) {
-    cli::cli_abort("No se encontró la columna de temperatura: {.val {col_temperatura}}.")
-  }
-  if (!col_luz %in% names(data)) {
-    cli::cli_abort("No se encontró la columna de luz: {.val {col_luz}}.")
+  calcular_rlg <- FALSE
+  luz_interna <- NULL
+  etiq_luz_norm <- NULL
+  etiq_osc_norm <- NULL
+
+  if (!is.null(factor_luz)) {
+    if (factor_luz %in% names(data)) {
+      luz_interna <- tolower(trimws(as.character(data[[factor_luz]])))
+      etiq_luz_norm <- tolower(trimws(etiq_luz))
+      etiq_osc_norm <- tolower(trimws(etiq_osc))
+
+      # Verificar que las etiquetas existan en los datos
+      niveles_luz <- unique(luz_interna)
+      if (etiq_luz_norm %in% niveles_luz && etiq_osc_norm %in% niveles_luz) {
+        calcular_rlg <- TRUE
+      } else {
+        cli::cli_warn(c(
+          "!" = "La columna {.val {factor_luz}} no contiene las etiquetas {.val {etiq_luz}} y {.val {etiq_osc}}.",
+          "i" = "No se calculará el RLG."
+        ))
+      }
+    } else {
+      cli::cli_warn("La columna {.val {factor_luz}} no existe en los datos. No se calculará el RLG.")
+    }
   }
 
   # ----------------------------------------------------------
@@ -191,9 +213,6 @@ preparar_datos_germinacion <- function(
   t0_rep <- numeric(n_filas); t25_rep <- numeric(n_filas)
   t50_rep <- numeric(n_filas); t75_rep <- numeric(n_filas)
 
-  luz_interna <- tolower(trimws(as.character(data[[col_luz]])))
-  etiq_luz_norm <- tolower(trimws(etiq_luz))
-
   dias_seguros <- ifelse(dias_numericos == 0, 0.1, dias_numericos)
 
   filas_omitidas_cinetica <- 0
@@ -202,8 +221,12 @@ preparar_datos_germinacion <- function(
     n_sem <- as.numeric(data[i, col_semillas])
     total_g <- data$Total_Germinadas[i]
 
-    es_oscuridad <- (luz_interna[i] != etiq_luz_norm)
-    aplicar_freno_cinetico <- (solo_luz_cinetica && es_oscuridad)
+    # Determinar si aplicar freno cinético
+    aplicar_freno_cinetico <- FALSE
+    if (solo_luz_cinetica && !is.null(luz_interna)) {
+      es_oscuridad <- (luz_interna[i] != etiq_luz_norm)
+      aplicar_freno_cinetico <- es_oscuridad
+    }
 
     if (aplicar_freno_cinetico || is.na(n_sem) || total_g == 0) {
       tmg[i] <- NA_real_; ivg[i] <- NA_real_; cvg[i] <- NA_real_; unc[i] <- NA_real_
@@ -263,35 +286,47 @@ preparar_datos_germinacion <- function(
   data$t75 <- ifelse(!is.na(data$t75) & !is.na(data$t0) & data$t75 < data$t0, data$t0, data$t75)
 
   # ----------------------------------------------------------
-  # 7. RLG POBLACIONAL: UN SOLO VALOR POR TEMPERATURA
+  # 7. RLG POBLACIONAL: UN SOLO VALOR POR TEMPERATURA (si aplica)
   # ----------------------------------------------------------
-  temp_interna <- tolower(trimws(as.character(data[[col_temperatura]])))
-  etiq_osc_norm <- tolower(trimws(etiq_osc))
-
   data$RLG <- NA_real_
-  temperaturas <- unique(temp_interna)
 
-  for (t_actual in temperaturas) {
-    filas_temperatura <- which(temp_interna == t_actual)
+  if (calcular_rlg) {
+    # Identificar la columna de temperatura (primera columna de factores que no es luz)
+    col_temperatura <- NULL
+    for (f in factores) {
+      if (f %in% names(data) && f != factor_luz) {
+        col_temperatura <- f
+        break
+      }
+    }
 
-    pg_luz <- data$PG[temp_interna == t_actual & luz_interna == etiq_luz_norm]
-    pg_osc <- data$PG[temp_interna == t_actual & luz_interna == etiq_osc_norm]
+    if (!is.null(col_temperatura)) {
+      temp_interna <- tolower(trimws(as.character(data[[col_temperatura]])))
+      temperaturas <- unique(temp_interna)
 
-    pg_luz <- pg_luz[!is.na(pg_luz)]
-    pg_osc <- pg_osc[!is.na(pg_osc)]
+      for (t_actual in temperaturas) {
+        filas_temperatura <- which(temp_interna == t_actual)
 
-    if (length(pg_luz) > 0 && length(pg_osc) > 0) {
-      mean_luz <- mean(pg_luz)
-      mean_osc <- mean(pg_osc)
+        pg_luz <- data$PG[temp_interna == t_actual & luz_interna == etiq_luz_norm]
+        pg_osc <- data$PG[temp_interna == t_actual & luz_interna == etiq_osc_norm]
 
-      if (mean_luz >= umbral_min_rlg || mean_osc >= umbral_min_rlg) {
-        rlg_poblacional <- if (mean_luz == 0 && mean_osc == 0) {
-          0.5
-        } else {
-          mean_luz / (mean_luz + mean_osc)
+        pg_luz <- pg_luz[!is.na(pg_luz)]
+        pg_osc <- pg_osc[!is.na(pg_osc)]
+
+        if (length(pg_luz) > 0 && length(pg_osc) > 0) {
+          mean_luz <- mean(pg_luz)
+          mean_osc <- mean(pg_osc)
+
+          if (mean_luz >= umbral_min_rlg || mean_osc >= umbral_min_rlg) {
+            rlg_poblacional <- if (mean_luz == 0 && mean_osc == 0) {
+              0.5
+            } else {
+              mean_luz / (mean_luz + mean_osc)
+            }
+
+            data$RLG[filas_temperatura[1]] <- rlg_poblacional
+          }
         }
-
-        data$RLG[filas_temperatura[1]] <- rlg_poblacional
       }
     }
   }
@@ -314,6 +349,12 @@ preparar_datos_germinacion <- function(
     cli::cli_inform(c(
       "!" = "{.strong {filas_omitidas_cinetica}} de {n_filas} filas fueron omitidas en índices cinéticos.",
       "i" = "Razón: {.val {if (solo_luz_cinetica) 'solo_luz_cinetica = TRUE' else 'semillas = 0 o sin germinación'}}."
+    ))
+  }
+
+  if (!calcular_rlg) {
+    cli::cli_inform(c(
+      "i" = "RLG no calculado: {.val {if (is.null(factor_luz)) 'factor_luz = NULL' else 'etiquetas no encontradas'}}."
     ))
   }
 
