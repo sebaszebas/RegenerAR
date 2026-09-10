@@ -19,10 +19,11 @@
 #' baja frecuencia de muestreo y los índices cinéticos no son confiables.
 #'
 #' ## Percentiles interpolados
-#' Los tiempos t0, t25, t50 y t75 se calculan mediante interpolación lineal
-#' sobre la curva acumulada de germinación. Se aplica un freno biológico
-#' adicional: ningún percentil puede ser menor que t0 (primera germinación
-#' observada).
+#' Los tiempos t0, t25, t50 y t75 se calculan mediante interpolación lineal 
+#' sobre la curva acumulada. Para evitar inconsistencias por ruido en los datos, 
+#' se aplica un freno que fuerza el orden cronológico estricto: 
+#' \code{t0 <= t25 <= t50 <= t75}. Si un percentil superior resulta menor que t0, 
+#' se corrige automáticamente al valor de t0.
 #'
 #' ## Índice RLG (Relative Light Germination)
 #' El RLG se calcula como un valor poblacional único por temperatura,
